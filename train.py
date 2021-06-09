@@ -149,7 +149,7 @@ def main():
     scheduler_dis = StepLR(optimizer_dis, step_size=TRAIN_LR_DECAY_STEP, gamma=TRAIN_LR_DECAY_RATE)
     scheduler_cat = StepLR(optimizer_cat, step_size=TRAIN_LR_DECAY_STEP, gamma=TRAIN_LR_DECAY_RATE)
     best_loss = 100
-    for epoch in range(train_epoch):
+    for epoch in range(1,train_epoch):
         print('Epoch: %d.'%(epoch))
         train(epoch,id,focal,exp_list,exp_dis,exp_cat,face_proj,lands_info,optimizer_dis,optimizer_cat,scheduler_dis,scheduler_cat)
         test(epoch,id,focal,exp_list,exp_dis,exp_cat,face_proj,lands_info,best_loss)
