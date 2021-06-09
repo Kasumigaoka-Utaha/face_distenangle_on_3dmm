@@ -27,10 +27,10 @@ class Average_data(object):
         self.count += n
         self.avg = self.sum / self.count
 
-
-
-def train(epoch,id,focal,exp_list,euler_list,trans_list,exp_dis,exp_cat,face_proj,lands_info,cxy,optimizer_dis,optimizer_cat,scheduler_dis,scheduler_cat):
-    rounds = 1000
+mouthIdx = range(31,)
+otherIdx = range(0,30)
+def train(epoch,id,focal,exp_list,exp_dis,exp_cat,face_proj,lands_info,optimizer_dis,optimizer_cat,scheduler_dis,scheduler_cat):
+    rounds = 2000
     length = len(exp_list)
     loss_data = Average_data()
     id = torch.as_tensor(id).cuda()
@@ -43,21 +43,29 @@ def train(epoch,id,focal,exp_list,euler_list,trans_list,exp_dis,exp_cat,face_pro
                 cho_2 = random.randint(0,length-1)
             exp_para_1 = torch.as_tensor(exp_list[cho_1]).reshape((1,79)).cuda()
             exp_para_2 = torch.as_tensor(exp_list[cho_2]).reshape((1,79)).cuda()
-            euler_para_1 = torch.as_tensor(euler_list[cho_1]).view(1,3).cuda()
-            trans_para_1 = torch.as_tensor(trans_list[cho_1]).view(1,3).cuda()
-            euler_para_2 = torch.as_tensor(euler_list[cho_2]).view(1,3).cuda()
-            trans_para_2 = torch.as_tensor(trans_list[cho_2]).view(1,3).cuda()
-            print(exp_para_2)
-            out_1,_ = exp_dis(exp_para_1)
-            print(out_1)
-            _,out_2 = exp_dis(exp_para_2)
-            exp_out = exp_cat(out_1,out_2)
-            print(exp_out)
-            geometry_with_expNet = face_proj.forward_geo_sub(id, exp_out, lands_info[-51:].long())
-            proj_geo_with_expNet = forward_transform(geometry_with_expNet, euler_para_1, trans_para_1, focal, cxy)
-            geometry_without_expNet = face_proj.forward_geo_sub(id, exp_para_2, lands_info[-51:].long())
-            proj_geo_without_expNet = forward_transform(geometry_without_expNet, euler_para_2, trans_para_2, focal, cxy)
-            loss_lan = cal_lan_loss(proj_geo_with_expNet[:, :, :2], proj_geo_without_expNet[:, :, :2])
+            # detach m1 side
+            out_1_1,out_1_2 = exp_dis(exp_para_1)
+            out_1_2.detach()
+            with torch.no_grad():
+                _,out_2 = exp_dis(exp_para_2)
+            exp_out = exp_cat(out_1_1,out_2)
+            exp_out += exp_para_1
+            geometry_with_expNet_1 = face_proj.forward_geo_sub(id, exp_out, lands_info[-51:].long())
+            geometry_without_expNet_1 = face_proj.forward_geo_sub(id, exp_para_1, lands_info[-51:].long())
+            geometry_without_expNet_2 = face_proj.forward_geo_sub(id, exp_para_2, lands_info[-51:].long())
+            loss_lan_others = cal_lan_loss(geometry_with_expNet_1[:, otherIdx, :2], geometry_without_expNet_1[:, otherIdx, :2])
+            # detach o1 side
+            out_2_1,out_2_2 = exp_dis(exp_para_2)
+            out_2_1.detach()
+            with torch.no_grad():
+                out_1,_ = exp_dis(exp_para_1)
+            exp_out = exp_cat(out_1,out_2_2)
+            exp_out += exp_para_1
+            geometry_with_expNet_2 = face_proj.forward_geo_sub(id, exp_out, lands_info[-51:].long())
+            geometry_without_expNet_1 = face_proj.forward_geo_sub(id, exp_para_1, lands_info[-51:].long())
+            geometry_without_expNet_2 = face_proj.forward_geo_sub(id, exp_para_2, lands_info[-51:].long())
+            loss_lan_mouth = cal_lan_loss(geometry_with_expNet_2[:, mouthIdx, :2], geometry_without_expNet_2[:, mouthIdx, :2])
+            loss_lan = loss_lan_mouth+loss_lan_others
             loss_data.update(loss_lan.item(), 1)
             _tqdm.set_postfix(OrderedDict(stage="train", epoch=epoch, loss=loss_data.avg),sample_num=round+1) 
             optimizer_dis.zero_grad()
@@ -68,35 +76,51 @@ def train(epoch,id,focal,exp_list,euler_list,trans_list,exp_dis,exp_cat,face_pro
     scheduler_cat.step()
     scheduler_dis.step()
 
-def test(epoch,id,focal,exp_list,euler_list,trans_list,exp_dis,exp_cat,face_proj,lands_info,cxy):
-    rounds = 100
+def test(epoch,id,focal,exp_list,exp_dis,exp_cat,face_proj,lands_info,best_loss):
+    rounds = 500
     length = len(exp_list)
     loss_data = Average_data()
     id = torch.as_tensor(id).cuda()
     focal = torch.as_tensor(focal).cuda()
-    with tqdm(range(rounds)) as _tqdm:
-        for round in _tqdm:
-            cho_1 = random.randint(0,length-1)
-            cho_2 = random.randint(0,length-1)
-            while cho_1 == cho_2:
+    with torch.no_grad():
+        with tqdm(range(rounds)) as _tqdm:
+            for round in _tqdm:
+                cho_1 = random.randint(0,length-1)
                 cho_2 = random.randint(0,length-1)
-            exp_para_1 = torch.as_tensor(exp_list[cho_1]).reshape((1,79)).cuda()
-            exp_para_2 = torch.as_tensor(exp_list[cho_2]).reshape((1,79)).cuda()
-            euler_para_1 = torch.as_tensor(euler_list[cho_1]).view(1,3).cuda()
-            trans_para_1 = torch.as_tensor(trans_list[cho_1]).view(1,3).cuda()
-            euler_para_2 = torch.as_tensor(euler_list[cho_2]).view(1,3).cuda()
-            trans_para_2 = torch.as_tensor(trans_list[cho_2]).view(1,3).cuda()
-            out_1,_ = exp_dis(exp_para_1)
-            _,out_2 = exp_dis(exp_para_2)
-            exp_out = exp_cat(out_1,out_2)
-            geometry_with_expNet = face_proj.forward_geo_sub(id, exp_out, lands_info[-51:].long())
-            proj_geo_with_expNet = forward_transform(geometry_with_expNet, euler_para_1, trans_para_1, focal, cxy)
-            geometry_without_expNet = face_proj.forward_geo_sub(id, exp_para_2, lands_info[-51:].long())
-            proj_geo_without_expNet = forward_transform(geometry_without_expNet, euler_para_2, trans_para_2, focal, cxy)
-            loss_lan = cal_lan_loss(proj_geo_with_expNet[:, :, :2], proj_geo_without_expNet[:, :, :2])
-            loss_data.update(loss_lan.item(), 1)
-            _tqdm.set_postfix(OrderedDict(stage="test", epoch=epoch, loss=loss_data.avg),sample_num=round+1) 
+                while cho_1 == cho_2:
+                    cho_2 = random.randint(0,length-1)
+                exp_para_1 = torch.as_tensor(exp_list[cho_1]).reshape((1,79)).cuda()
+                exp_para_2 = torch.as_tensor(exp_list[cho_2]).reshape((1,79)).cuda()
+                out_1,_ = exp_dis(exp_para_1)
+                _,out_2 = exp_dis(exp_para_2)
+                exp_out = exp_cat(out_1,out_2)
+                exp_out += exp_para_1
+                geometry_with_expNet = face_proj.forward_geo_sub(id, exp_out, lands_info[-51:].long())
+                geometry_without_expNet_1 = face_proj.forward_geo_sub(id, exp_para_1, lands_info[-51:].long())
+                geometry_without_expNet_2 = face_proj.forward_geo_sub(id, exp_para_2, lands_info[-51:].long())
+                loss_lan_mouth = cal_lan_loss(geometry_with_expNet[:, mouthIdx, :2], geometry_without_expNet_2[:, mouthIdx, :2])
+                loss_lan_others = cal_lan_loss(geometry_with_expNet[:, otherIdx, :2], geometry_without_expNet_1[:, otherIdx, :2])
+                loss_lan = loss_lan_mouth + loss_lan_others
+                loss_data.update(loss_lan.item(), 1)
+                _tqdm.set_postfix(OrderedDict(stage="test", epoch=epoch, loss=loss_data.avg),sample_num=round+1) 
     print('In the epoch %d, the average loss is %f.'%(epoch,loss_data.avg))
+    if best_loss>loss_data.avg:
+        best_loss = loss_data.avg
+        print('Saving..')
+        if not os.path.isdir('checkpoint'):
+            os.mkdir('checkpoint')
+        state_dis = {
+            'net': exp_dis.state_dict(),
+            'epoch': epoch
+        }
+        torch.save(state_dis, './checkpoint/dis_ckpt.pth')
+        state_cat = {
+            'net': exp_cat.state_dict(),
+            'epoch': epoch
+        }
+        torch.save(state_cat, './checkpoint/cat_ckpt.pth')
+
+        
 
 
 def main():
@@ -112,7 +136,7 @@ def main():
     # load data
     path = './face_3dmm_params/obama/'
     id,focal = data_loader.load_id(os.path.join(path,'static_params.json'))
-    exp_list,euler_list,trans_list = data_loader.load_exp(path)
+    exp_list,_,_ = data_loader.load_exp(path)
     exp_dis = network.Distangler(79,128,64)
     exp_cat = network.Concatenater(128,64,79)
     device = 'cuda'
@@ -120,15 +144,15 @@ def main():
     exp_cat = exp_cat.to(device)
     id_dim, exp_dim, tex_dim, point_num = 100, 79, 100, 34650
     face_proj = Face_3DMM('./3DMM',id_dim, exp_dim, tex_dim, point_num)
-    cxy = torch.tensor((225, 225), dtype=torch.float).cuda()
     optimizer_dis = optim.SGD(exp_dis.parameters(), lr=TRAIN_LR,momentum=TRAIN_MOMENTUM,weight_decay=TRAIN_WEIGHT_DECAY)
     optimizer_cat = optim.SGD(exp_cat.parameters(), lr=TRAIN_LR,momentum=TRAIN_MOMENTUM,weight_decay=TRAIN_WEIGHT_DECAY)
     scheduler_dis = StepLR(optimizer_dis, step_size=TRAIN_LR_DECAY_STEP, gamma=TRAIN_LR_DECAY_RATE)
     scheduler_cat = StepLR(optimizer_cat, step_size=TRAIN_LR_DECAY_STEP, gamma=TRAIN_LR_DECAY_RATE)
+    best_loss = 100
     for epoch in range(train_epoch):
         print('Epoch: %d.'%(epoch))
-        train(epoch,id,focal,exp_list,euler_list,trans_list,exp_dis,exp_cat,face_proj,lands_info,cxy,optimizer_dis,optimizer_cat,scheduler_dis,scheduler_cat)
-        test(epoch,id,focal,exp_list,euler_list,trans_list,exp_dis,exp_cat,face_proj,lands_info,cxy)
+        train(epoch,id,focal,exp_list,exp_dis,exp_cat,face_proj,lands_info,optimizer_dis,optimizer_cat,scheduler_dis,scheduler_cat)
+        test(epoch,id,focal,exp_list,exp_dis,exp_cat,face_proj,lands_info,best_loss)
 
 
 if __name__ == '__main__':
