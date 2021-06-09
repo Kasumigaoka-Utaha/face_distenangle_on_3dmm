@@ -8,43 +8,49 @@ class Distangler(nn.Module):
     def __init__(self,input_channel=79,output_channel_1=128,output_channel_2=64):
         super(Distangler,self).__init__()
         # shared fully connect layers 
-        self.relu = nn.ReLU(inplace = False)
+        self.activ = nn.Tanh()
         self.fc1 = nn.Linear(input_channel,128)
         self.fc2 = nn.Linear(128,256)
-        self.fc3 = nn.Linear(256,512)
+        self.fc3 = nn.Linear(256,256)
         # branch 1 to feature parameters for other features
-        self.branch1 = nn.Linear(512,output_channel_1)
+        self.branch1 = nn.Linear(256,output_channel_1)
         # branch 2 to feature parameters for mouths
-        self.branch2 = nn.Linear(512,output_channel_2)
+        self.branch2 = nn.Linear(256,output_channel_2)
     
     def forward(self,x):
         x = self.fc1(x)
-        x = self.relu(x)
+        x = F.normalize(x)
+        x = self.activ(x)
         x = self.fc2(x)
-        x = self.relu(x)
+        x = F.normalize(x)
+        x = self.activ(x)
         x = self.fc3(x)
-        x = self.relu(x)
+        x = F.normalize(x)
+        x = self.activ(x)
         out1 = self.branch1(x)
-        out1 = F.normalize(out1,dim=1)
+        out1 = F.normalize(out1)
         out2 = self.branch2(x)
-        out2 = F.normalize(out2,dim=1)
+        out2 = F.normalize(out2)
         return out1,out2
 
 class Concatenater(nn.Module):
     def __init__(self,input_channel_1=128,input_channel_2=64,output_channel=79):
         super(Concatenater,self).__init__()
         self.channel = input_channel_1 + input_channel_2
-        self.relu = nn.ReLU(inplace = False)
+        self.activ = nn.Tanh()
         self.fc1 = nn.Linear(self.channel,128)
         self.fc2 = nn.Linear(128,256)
         self.fc3 = nn.Linear(256,output_channel)
     def forward(self,x1,x2):
         # concanate the two vectors
         x = torch.cat((x1,x2),dim=1)
-        out = self.relu(self.fc1(x))
-        out = self.relu(self.fc2(out))
+        out = self.fc1(x)
+        out = F.normalize(out)
+        out = self.activ(out)
+        out = self.fc2(out)
+        out = F.normalize(out)
+        out = self.activ(out)
         out = self.fc3(out)
-        out = F.normalize(out,dim=1)
         return out
 
 #class MouthNet(nn.Module):
