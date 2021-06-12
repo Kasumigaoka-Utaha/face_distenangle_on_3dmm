@@ -35,8 +35,8 @@ def main():
     id_dim, exp_dim, tex_dim, point_num = 100, 79, 100, 34650
     face_proj = Face_3DMM('./3DMM',id_dim, exp_dim, tex_dim, point_num)
     color = (0,0,255)
-    radius = 0.1
-    thickness = 0.001
+    radius = 5
+    thickness = 5
     length = len(exp_list)
     id = torch.as_tensor(id).cuda()
     focal = torch.as_tensor(focal).cuda()
@@ -57,16 +57,43 @@ def main():
         geometry_with_expNet = face_proj.forward_geo_sub(id, exp_out, lands_info[-51:].long())
         geometry_without_expNet_1 = face_proj.forward_geo_sub(id, exp_para_1, lands_info[-51:].long())
         geometry_without_expNet_2 = face_proj.forward_geo_sub(id, exp_para_2, lands_info[-51:].long())
-        img_with_expNet = np.zeros((100,100),np.double)
-        for point in geometry_with_expNet[:,:,2]:
+        geometry_with_expNet_list = geometry_with_expNet[:,:,:2].view(51,2).tolist()
+        img_with_expNet = np.zeros((2000,2000),np.uint8)
+        img_with_expNet.fill(255)
+        for point in geometry_with_expNet_list:
+            point[0] += 100
+            point[1] += 100
+            point[0] *= 10
+            point[1] *= 10
+            point[0] = round(point[0])
+            point[1] = round(point[1])
+            point = tuple(point)
             cv2.circle(img_with_expNet,point,radius,color,thickness)
         cv2.imwrite('./demo_results/img_with_expNet.png',img_with_expNet)
-        img_without_expNet_1 = np.zeros((100,100),np.double)
-        for point in geometry_without_expNet_1[:,:,2]:
+        geometry_without_expNet_1_list = geometry_without_expNet_1[:,:,:2].view(51,2).tolist()
+        img_without_expNet_1 = np.zeros((2000,2000),np.uint8)
+        img_without_expNet_1.fill(255)
+        for point in geometry_without_expNet_1_list:
+            point[0] += 100
+            point[1] += 100
+            point[0] *= 10
+            point[1] *= 10
+            point[0] = round(point[0])
+            point[1] = round(point[1])
+            point = tuple(point)
             cv2.circle(img_without_expNet_1,point,radius,color,thickness)
         cv2.imwrite('./demo_results/img_without_expNet_1.png',img_without_expNet_1)
-        img_without_expNet_2 = np.zeros((100,100),np.double)
-        for point in geometry_without_expNet_2[:,:,2]:
+        geometry_without_expNet_2_list = geometry_without_expNet_2[:,:,:2].view(51,2).tolist()
+        img_without_expNet_2 = np.zeros((2000,2000),np.uint8)
+        img_without_expNet_2.fill(255)
+        for point in geometry_without_expNet_2_list:
+            point[0] += 100
+            point[1] += 100
+            point[0] *= 10
+            point[1] *= 10
+            point[0] = round(point[0])
+            point[1] = round(point[1])
+            point = tuple(point)
             cv2.circle(img_without_expNet_2,point,radius,color,thickness)
         cv2.imwrite('./demo_results/img_without_expNet_2.png',img_without_expNet_2)
 
